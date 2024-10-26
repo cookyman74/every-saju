@@ -1,9 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -11,4 +5,103 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+}
+
+// 해석 카테고리
+model InterpretationCategory {
+  id          String                  @id @default(uuid())
+  name        String
+  description String?
+  orderIndex  Int
+  isActive    Boolean                 @default(true)
+  patterns    InterpretationPattern[]
+  createdAt   DateTime                @default(now())
+  updatedAt   DateTime                @updatedAt
+
+  @@map("interpretation_categories")
+}
+
+// 해석 패턴
+model InterpretationPattern {
+  id         String                 @id @default(uuid())
+  categoryId String
+  conditions Json
+  content    String
+  weight     Int                    @default(1)
+  isActive   Boolean                @default(true)
+  category   InterpretationCategory @relation(fields: [categoryId], references: [id])
+  createdAt  DateTime               @default(now())
+  updatedAt  DateTime               @updatedAt
+
+  @@map("interpretation_patterns")
+}
+
+// 오행 정보
+model FiveElement {
+  id              String   @id @default(uuid())
+  name            String
+  koreanName      String
+  characteristics Json
+  relationships   Json
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("five_elements")
+}
+
+// 천간 정보
+model HeavenlyStem {
+  id              String   @id @default(uuid())
+  name            String
+  koreanName      String
+  elementId       String
+  yinYang         Boolean
+  characteristics Json
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("heavenly_stems")
+}
+
+// 지지 정보
+model EarthlyBranch {
+  id              String   @id @default(uuid())
+  name            String
+  koreanName      String
+  elementId       String
+  season          String?
+  timeRange       Json
+  characteristics Json
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("earthly_branches")
+}
+
+// 절기 정보
+model SolarTerm {
+  id              String   @id @default(uuid())
+  name            String
+  koreanName      String
+  description     String?
+  startDegree     Int
+  elementId       String
+  characteristics Json
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("solar_terms")
+}
+
+// 시간 보정 정보
+model TimeCorrection {
+  id              String   @id @default(uuid())
+  solarTermId     String
+  timeRange       Json
+  correctionValue Decimal  @db.Decimal(5, 2)
+  correctionRules Json
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("time_corrections")
 }
