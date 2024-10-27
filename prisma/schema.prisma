@@ -49,12 +49,13 @@ enum NotificationType {
 
 // 사주의 기둥 모델들 (사주 정보는 연주, 월주, 일주, 시주로 구성됨)
 model SajuPillar {
-  id          String  @id @default(uuid()) // 고유 ID
-  userId      String? // 사용자와 연결하는 ID (선택적)
-  yearPillar  Pillar  @relation("YearPillar", fields: [yearPillarId], references: [id])
-  monthPillar Pillar  @relation("MonthPillar", fields: [monthPillarId], references: [id])
-  dayPillar   Pillar  @relation("DayPillar", fields: [dayPillarId], references: [id])
-  timePillar  Pillar  @relation("TimePillar", fields: [timePillarId], references: [id])
+  id     String  @id @default(uuid())
+  userId String? // 사용자와 연결하는 ID (선택적)
+
+  yearPillar  Pillar @relation("YearPillarToSajuPillar", fields: [yearPillarId], references: [id])
+  monthPillar Pillar @relation("MonthPillarToSajuPillar", fields: [monthPillarId], references: [id])
+  dayPillar   Pillar @relation("DayPillarToSajuPillar", fields: [dayPillarId], references: [id])
+  timePillar  Pillar @relation("TimePillarToSajuPillar", fields: [timePillarId], references: [id])
 
   yearPillarId  String
   monthPillarId String
@@ -68,6 +69,8 @@ model SajuPillar {
   analyses        Analysis[] // 분석 이력
   userHistory     UserHistory? // 사용자의 과거 기록
   interpretations Interpretation[] // 해석 정보들
+  Pillar          Pillar?          @relation(fields: [pillarId], references: [id]) // 연결된 기둥
+  pillarId        String?
 
   @@index([userId]) // userId를 기준으로 빠르게 검색
 }
@@ -79,12 +82,17 @@ model Pillar {
   heavenlyStem  Stem       @relation(fields: [stemId], references: [id]) // 천간 정보
   earthlyBranch Branch     @relation(fields: [branchId], references: [id]) // 지지 정보
 
-  stemId      String
-  branchId    String
-  sajuPillars SajuPillar[] // 이 기둥이 속한 사주 정보
+  stemId   String
+  branchId String
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  sajuYearPillars  SajuPillar[] @relation("YearPillarToSajuPillar")
+  sajuMonthPillars SajuPillar[] @relation("MonthPillarToSajuPillar")
+  sajuDayPillars   SajuPillar[] @relation("DayPillarToSajuPillar")
+  sajuTimePillars  SajuPillar[] @relation("TimePillarToSajuPillar")
+
+  createdAt  DateTime     @default(now()) // 생성 시간
+  updatedAt  DateTime     @updatedAt // 수정 시간 자동 갱신
+  SajuPillar SajuPillar[]
 
   @@unique([type, stemId, branchId]) // 천간과 지지가 같은 기둥이 중복되지 않게 함
 }
@@ -98,7 +106,7 @@ model Stem {
   yinYang    Boolean // 음양 정보 (true=양, false=음)
 
   elementId String
-  pillars   Pillar[]
+  pillars   Pillar[] // 관련 기둥
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -116,10 +124,12 @@ model Branch {
   timeRange  Json // 지지가 나타나는 시간대
 
   elementId String
-  pillars   Pillar[]
+  pillars   Pillar[] // 관련 기둥
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  SolarTerm   SolarTerm? @relation(fields: [solarTermId], references: [id])
+  solarTermId String?
 
   @@unique([name, koreanName])
 }
@@ -132,9 +142,9 @@ model Element {
   characteristics Json // 오행의 특성 정보 (예: 성질, 색상 등)
   relationships   Json // 오행의 상생 상극 관계
 
-  stems      Stem[]
-  branches   Branch[]
-  solarTerms SolarTerm[]
+  stems      Stem[] // 연결된 천간
+  branches   Branch[] // 연결된 지지
+  solarTerms SolarTerm[] // 관련 절기
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -153,7 +163,7 @@ model UserPreferences {
   showScores      Boolean @default(true) // 점수 표시 여부
 
   enableNotifications Boolean            @default(true)
-  notificationTypes   NotificationType[]
+  notificationTypes   NotificationType[] // 알림 유형
   notificationMethod  String // 알림 방식 (이메일, 푸시 등)
 
   primaryLanguage   String  @default("ko")
@@ -168,8 +178,8 @@ model UserPreferences {
 // 사용자 기록 모델
 model UserHistory {
   id          String          @id @default(uuid())
-  sajuPillar  SajuPillar      @relation(fields: [sajuPillarId], references: [id])
-  preferences UserPreferences @relation(fields: [preferencesId], references: [id])
+  sajuPillar  SajuPillar      @relation(fields: [sajuPillarId], references: [id]) // 관련 사주 기둥
+  preferences UserPreferences @relation(fields: [preferencesId], references: [id]) // 선호 정보
   analyses    Json // 분석 기록
   favorites   Json // 즐겨찾기 해석 목록
   feedback    Json // 사용자 피드백
@@ -280,4 +290,93 @@ model DestinyAnalysis {
 
   createdAt DateTime @default(now()) // 생성 시간
   updatedAt DateTime @updatedAt // 수정 시간 자동 갱신
+}
+
+// SolarTerm 모델: 절기 정보 저장
+model SolarTerm {
+  id          String  @id @default(uuid())
+  name        String // 절기 이름
+  koreanName  String // 절기 이름의 한국어 버전
+  startDegree Int // 절기가 시작되는 황경도
+  elementId   String
+  element     Element @relation(fields: [elementId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // 역관계 설정
+  branches        Branch[] // 관련된 지지들
+  timeCorrections TimeCorrection[] // SolarTerm과 TimeCorrection의 1:N 관계
+
+  @@unique([name, startDegree])
+  @@unique([koreanName])
+}
+
+// TimeCorrection 모델 추가
+model TimeCorrection {
+  id              String  @id @default(uuid())
+  solarTermId     String // 절기 참조
+  timeRange       Json // 시간 범위 (시작/종료 시간)
+  correctionValue Decimal @db.Decimal(5, 2) // 보정값
+  correctionRules Json? // 보정 규칙
+
+  // 관계 설정
+  solarTerm SolarTerm @relation(fields: [solarTermId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([solarTermId])
+  @@index([timeRange]) // JSON 필드 인덱싱 (PostgreSQL)
+}
+
+// Category 모델: 해석 카테고리
+model Category {
+  id          String   @id @default(uuid())
+  name        String // 카테고리 이름
+  description String?
+  orderIndex  Int      @default(0) // 표시 순서 추가
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  patterns InterpretationPattern[] // 카테고리에 속한 패턴
+
+  @@unique([name])
+  @@index([isActive, orderIndex]) // 활성 카테고리 정렬 검색 최적화
+}
+
+// InterpretationPattern 모델: 해석 패턴 정보 저장
+model InterpretationPattern {
+  id              String           @id @default(uuid())
+  categoryId      String
+  isActive        Boolean          @default(true)
+  weight          Int
+  conditions      Json
+  content         String           @db.Text // 해석 내용 추가
+  validityPeriod  Json? // 유효 기간 정보 추가
+  category        Category         @relation(fields: [categoryId], references: [id])
+  interpretations Interpretation[] // 관련 해석 정보
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([categoryId, isActive, weight]) // 패턴 검색 최적화
+}
+
+// Interpretation 모델: 해석 결과 저장
+model Interpretation {
+  id           String                @id @default(uuid())
+  sajuPillarId String
+  patternId    String
+  content      String
+  confidence   Float
+  metadata     Json? // 추가 메타데이터
+  sajuPillar   SajuPillar            @relation(fields: [sajuPillarId], references: [id])
+  pattern      InterpretationPattern @relation(fields: [patternId], references: [id])
+
+  createdAt  DateTime  @default(now())
+  validUntil DateTime? // 해석 유효 기간
+
+  @@index([sajuPillarId, createdAt]) // 해석 이력 검색 최적화
 }
