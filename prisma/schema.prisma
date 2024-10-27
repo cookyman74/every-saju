@@ -4,104 +4,280 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
+  url      = env("DATABASE_URL") // 데이터베이스 주소를 환경변수에서 가져옵니다.
 }
 
-// 해석 카테고리
-model InterpretationCategory {
-  id          String                  @id @default(uuid())
-  name        String
-  description String?
-  orderIndex  Int
-  isActive    Boolean                 @default(true)
-  patterns    InterpretationPattern[]
-  createdAt   DateTime                @default(now())
-  updatedAt   DateTime                @updatedAt
+// 기본 설정을 위한 Enum들
 
-  @@map("interpretation_categories")
+// 사주 '기둥'을 나타내는 종류 (연주, 월주, 일주, 시주)
+enum PillarType {
+  YEAR // 연도와 관련된 기둥
+  MONTH // 월과 관련된 기둥
+  DAY // 일과 관련된 기둥
+  TIME // 시간과 관련된 기둥
 }
 
-// 해석 패턴
-model InterpretationPattern {
-  id         String                 @id @default(uuid())
-  categoryId String
-  conditions Json
-  content    String
-  weight     Int                    @default(1)
-  isActive   Boolean                @default(true)
-  category   InterpretationCategory @relation(fields: [categoryId], references: [id])
-  createdAt  DateTime               @default(now())
-  updatedAt  DateTime               @updatedAt
-
-  @@map("interpretation_patterns")
+// 로그의 중요도를 나타내는 레벨 (중요할수록 위로)
+enum LogLevel {
+  DEBUG // 문제를 찾기 위해 자세히 기록하는 정보
+  INFO // 시스템의 기본 정보
+  WARN // 주의가 필요한 정보
+  ERROR // 시스템에서 문제가 발생한 정보
+  CRITICAL // 매우 심각한 오류 정보
 }
 
-// 오행 정보
-model FiveElement {
-  id              String   @id @default(uuid())
-  name            String
-  koreanName      String
-  characteristics Json
-  relationships   Json
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
-  @@map("five_elements")
+// 캐시 상태를 나타내는 Enum
+enum CacheStatus {
+  ACTIVE // 현재 사용 중인 상태
+  EXPIRED // 만료되어 사용되지 않는 상태
+  REFRESHING // 갱신 중인 상태
 }
 
-// 천간 정보
-model HeavenlyStem {
-  id              String   @id @default(uuid())
-  name            String
-  koreanName      String
-  elementId       String
-  yinYang         Boolean
-  characteristics Json
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
-  @@map("heavenly_stems")
+// 캐시가 만료될 때 수행할 작업 설정
+enum ExpirationPolicy {
+  DELETE // 만료된 데이터를 삭제
+  REFRESH // 데이터를 다시 갱신
+  KEEP // 만료된 데이터를 유지
 }
 
-// 지지 정보
-model EarthlyBranch {
-  id              String   @id @default(uuid())
-  name            String
-  koreanName      String
-  elementId       String
-  season          String?
-  timeRange       Json
-  characteristics Json
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
-  @@map("earthly_branches")
+// 사용자에게 알림을 줄 때 어떤 종류인지 나타내는 Enum
+enum NotificationType {
+  PERIODIC_ANALYSIS // 정기적인 분석 알림
+  IMPORTANT_PERIODS // 중요한 시기 알림
+  DESTINY_CHANGES // 운세 변화 알림
 }
 
-// 절기 정보
-model SolarTerm {
-  id              String   @id @default(uuid())
-  name            String
-  koreanName      String
-  description     String?
-  startDegree     Int
-  elementId       String
-  characteristics Json
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+// 사주의 기둥 모델들 (사주 정보는 연주, 월주, 일주, 시주로 구성됨)
+model SajuPillar {
+  id          String  @id @default(uuid()) // 고유 ID
+  userId      String? // 사용자와 연결하는 ID (선택적)
+  yearPillar  Pillar  @relation("YearPillar", fields: [yearPillarId], references: [id])
+  monthPillar Pillar  @relation("MonthPillar", fields: [monthPillarId], references: [id])
+  dayPillar   Pillar  @relation("DayPillar", fields: [dayPillarId], references: [id])
+  timePillar  Pillar  @relation("TimePillar", fields: [timePillarId], references: [id])
 
-  @@map("solar_terms")
+  yearPillarId  String
+  monthPillarId String
+  dayPillarId   String
+  timePillarId  String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt // 수정될 때마다 자동으로 시간 갱신
+
+  // 다른 모델과의 관계 설정
+  analyses        Analysis[] // 분석 이력
+  userHistory     UserHistory? // 사용자의 과거 기록
+  interpretations Interpretation[] // 해석 정보들
+
+  @@index([userId]) // userId를 기준으로 빠르게 검색
 }
 
-// 시간 보정 정보
-model TimeCorrection {
-  id              String   @id @default(uuid())
-  solarTermId     String
-  timeRange       Json
-  correctionValue Decimal  @db.Decimal(5, 2)
-  correctionRules Json
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+// 사주의 기둥이 되는 각각의 구성 요소인 천간과 지지를 담은 모델
+model Pillar {
+  id            String     @id @default(uuid())
+  type          PillarType // 기둥의 종류 (연주, 월주 등)
+  heavenlyStem  Stem       @relation(fields: [stemId], references: [id]) // 천간 정보
+  earthlyBranch Branch     @relation(fields: [branchId], references: [id]) // 지지 정보
 
-  @@map("time_corrections")
+  stemId      String
+  branchId    String
+  sajuPillars SajuPillar[] // 이 기둥이 속한 사주 정보
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([type, stemId, branchId]) // 천간과 지지가 같은 기둥이 중복되지 않게 함
+}
+
+// 천간 (하늘의 기운) 모델
+model Stem {
+  id         String  @id @default(uuid())
+  name       String // 천간 이름 (한자)
+  koreanName String // 천간 이름 (한글)
+  element    Element @relation(fields: [elementId], references: [id]) // 오행 정보
+  yinYang    Boolean // 음양 정보 (true=양, false=음)
+
+  elementId String
+  pillars   Pillar[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([name, koreanName])
+}
+
+// 지지 (땅의 기운) 모델
+model Branch {
+  id         String  @id @default(uuid())
+  name       String // 지지 이름 (한자)
+  koreanName String // 지지 이름 (한글)
+  element    Element @relation(fields: [elementId], references: [id])
+  season     String? // 지지와 관련된 계절
+  timeRange  Json // 지지가 나타나는 시간대
+
+  elementId String
+  pillars   Pillar[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([name, koreanName])
+}
+
+// 오행을 나타내는 모델 (목, 화, 토, 금, 수)
+model Element {
+  id              String @id @default(uuid())
+  name            String // 오행 이름 (예: 목, 화 등)
+  koreanName      String // 오행 이름 (한글)
+  characteristics Json // 오행의 특성 정보 (예: 성질, 색상 등)
+  relationships   Json // 오행의 상생 상극 관계
+
+  stems      Stem[]
+  branches   Branch[]
+  solarTerms SolarTerm[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([name, koreanName])
+}
+
+// 사용자의 선호 정보 (해석 스타일, 알림 설정 등) 모델
+model UserPreferences {
+  id     String @id @default(uuid())
+  userId String @unique
+
+  detailLevel     String // 해석의 깊이 수준
+  stylePreference String // 해석 스타일 선호
+  showHanja       Boolean @default(false) // 한자 표시 여부
+  showScores      Boolean @default(true) // 점수 표시 여부
+
+  enableNotifications Boolean            @default(true)
+  notificationTypes   NotificationType[]
+  notificationMethod  String // 알림 방식 (이메일, 푸시 등)
+
+  primaryLanguage   String  @default("ko")
+  secondaryLanguage String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userHistory UserHistory?
+}
+
+// 사용자 기록 모델
+model UserHistory {
+  id          String          @id @default(uuid())
+  sajuPillar  SajuPillar      @relation(fields: [sajuPillarId], references: [id])
+  preferences UserPreferences @relation(fields: [preferencesId], references: [id])
+  analyses    Json // 분석 기록
+  favorites   Json // 즐겨찾기 해석 목록
+  feedback    Json // 사용자 피드백
+
+  sajuPillarId  String @unique
+  preferencesId String @unique
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// 분석 결과 모델 (사주 기둥을 통해 분석 결과 저장)
+model Analysis {
+  id           String     @id @default(uuid())
+  sajuPillarId String
+  sajuPillar   SajuPillar @relation(fields: [sajuPillarId], references: [id])
+
+  elementAnalysis     ElementAnalysis?
+  personalityAnalysis PersonalityAnalysis?
+  destinyAnalysis     DestinyAnalysis?
+
+  confidence Float // 분석 결과에 대한 신뢰도
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([sajuPillarId])
+}
+
+// 로그 정보 모델
+model LogEntry {
+  id      String   @id @default(uuid())
+  level   LogLevel // 로그의 중요도
+  message String // 로그 메시지
+
+  module   String // 로그가 발생한 모듈
+  function String // 로그가 발생한 함수
+  userId   String? // 로그를 발생시킨 사용자 ID
+
+  errorCode  String? // 에러 코드
+  errorStack String? // 에러 스택
+  metadata   Json? // 추가 정보
+
+  createdAt DateTime @default(now())
+
+  @@index([level, createdAt])
+  @@index([userId, createdAt])
+}
+
+// 캐시 정보 모델
+model CacheEntry {
+  id    String @id @default(uuid())
+  key   String @unique // 캐시 키값
+  value Json // 캐시 데이터
+
+  status           CacheStatus // 캐시 상태 (활성, 만료 등)
+  expirationPolicy ExpirationPolicy // 만료 정책 (삭제, 갱신 등)
+
+  expiresAt      DateTime
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @default(now())
+  lastAccessedAt DateTime @default(now())
+  accessCount    Int      @default(0)
+
+  @@index([status, expiresAt])
+  @@index([key, status])
+}
+
+// ElementAnalysis: 오행 분석 결과를 저장하는 모델
+model ElementAnalysis {
+  id         String   @id @default(uuid()) // 고유 ID
+  analysisId String   @unique // Analysis와 연결되는 ID
+  analysis   Analysis @relation(fields: [analysisId], references: [id]) // Analysis 모델과 관계 설정
+
+  dominantElements String[] // 강한 오행 요소
+  weakElements     String[] // 약한 오행 요소
+  balancedElements String[] // 균형 잡힌 오행 요소
+  recommendations  String[] // 오행 분석에 대한 추천사항
+
+  createdAt DateTime @default(now()) // 생성 시간
+  updatedAt DateTime @updatedAt // 수정 시간 자동 갱신
+}
+
+// PersonalityAnalysis: 성격 분석 결과를 저장하는 모델
+model PersonalityAnalysis {
+  id         String   @id @default(uuid()) // 고유 ID
+  analysisId String   @unique // Analysis와 연결되는 ID
+  analysis   Analysis @relation(fields: [analysisId], references: [id]) // Analysis 모델과 관계 설정
+
+  mainTraits      String[] // 주요 성격 특성
+  strengths       String[] // 강점
+  weaknesses      String[] // 약점
+  recommendations String[] // 성격 분석에 대한 추천사항
+
+  createdAt DateTime @default(now()) // 생성 시간
+  updatedAt DateTime @updatedAt // 수정 시간 자동 갱신
+}
+
+// DestinyAnalysis: 운세 분석 결과를 저장하는 모델
+model DestinyAnalysis {
+  id         String   @id @default(uuid()) // 고유 ID
+  analysisId String   @unique // Analysis와 연결되는 ID
+  analysis   Analysis @relation(fields: [analysisId], references: [id]) // Analysis 모델과 관계 설정
+
+  yearlyDestiny   Json // 연간 운세 정보
+  monthlyDestiny  Json // 월간 운세 정보
+  recommendations String[] // 운세 분석에 대한 추천사항
+
+  createdAt DateTime @default(now()) // 생성 시간
+  updatedAt DateTime @updatedAt // 수정 시간 자동 갱신
 }
