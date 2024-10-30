@@ -1,5 +1,4 @@
 // src/saju-analysis/services/result-formatter.service.ts
-// todo: 앤트리 확인 필요.
 
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -17,15 +16,14 @@ import { ResultFormatterException } from '../exceptions/result-formatter.excepti
 @Injectable()
 export class ResultFormatterService {
   private readonly logger = new Logger(ResultFormatterService.name);
-  private readonly DEFAULT_LANGUAGE: string; // 기본 언어 설정
-  private readonly MAX_SUMMARY_LENGTH: number; // 요약의 최대 길이
-  private readonly INCLUDE_METADATA: boolean; // 메타데이터 포함 여부
+  private readonly DEFAULT_LANGUAGE: string;
+  private readonly MAX_SUMMARY_LENGTH: number;
+  private readonly INCLUDE_METADATA: boolean;
 
   constructor(
     private readonly loggingService: EnhancedLoggingService,
     private readonly configService: ConfigService,
   ) {
-    // 환경 변수를 통해 기본 설정값 가져오기
     this.DEFAULT_LANGUAGE = this.configService.get<string>(
       'DEFAULT_LANGUAGE',
       'ko',
@@ -41,7 +39,7 @@ export class ResultFormatterService {
   }
 
   /**
-   * 해석 결과를 지정된 형식으로 포맷팅하는 메인 메서드
+   * 해석 결과를 지정된 형식으로 포맷팅
    * @param result - 포맷팅할 해석 결과
    * @param options - 포맷팅 옵션
    */
@@ -57,8 +55,11 @@ export class ResultFormatterService {
     };
 
     try {
-      this.validateInput(result); // 입력값 검증
-      const formattingOptions = this.prepareFormattingOptions(options); // 옵션 설정
+      // 입력값 검증
+      this.validateInput(result);
+
+      // 기본 옵션 설정
+      const formattingOptions = this.prepareFormattingOptions(options);
 
       // 메인 해석 포맷팅
       const mainInterpretation = await this.formatMainInterpretation(
@@ -118,14 +119,14 @@ export class ResultFormatterService {
   }
 
   /**
-   * 입력값 검증 메서드 - 필수 필드들이 제대로 포함되었는지 확인
+   * 입력값 검증
+   * @param result - 검증할 해석 결과
    */
   private validateInput(result: IInterpretationResult): void {
     if (!result) {
       throw new ResultFormatterException('Result cannot be null or undefined');
     }
 
-    // 필수 필드가 있는지 확인
     const requiredFields = ['mainInterpretation', 'confidence', 'metadata'];
     requiredFields.forEach((field) => {
       if (!(field in result)) {
@@ -133,7 +134,6 @@ export class ResultFormatterService {
       }
     });
 
-    // 신뢰도 값이 유효한지 확인
     if (
       typeof result.confidence !== 'number' ||
       result.confidence < 0 ||
@@ -144,7 +144,8 @@ export class ResultFormatterService {
   }
 
   /**
-   * 포맷팅 옵션을 설정 - 기본 옵션과 사용자 옵션을 조합
+   * 포맷팅 옵션 준비
+   * @param options - 사용자 지정 옵션
    */
   private prepareFormattingOptions(
     options: IFormattingOptions,
@@ -160,17 +161,21 @@ export class ResultFormatterService {
   }
 
   /**
-   * 메인 해석 포맷팅 - 지정된 옵션에 따라 메인 해석을 포맷팅
+   * 메인 해석 포맷팅
+   * @param interpretation - 포맷팅할 메인 해석
+   * @param options - 포맷팅 옵션
    */
   private async formatMainInterpretation(
     interpretation: string,
     options: Required<IFormattingOptions>,
   ): Promise<string> {
     try {
-      let formatted = this.applyLanguageFormatting(
-        interpretation,
-        options.language,
-      );
+      let formatted = interpretation;
+
+      // 언어별 포맷팅 규칙 적용
+      formatted = this.applyLanguageFormatting(formatted, options.language);
+
+      // 출력 형식에 따른 변환
       switch (options.outputFormat) {
         case OutputFormat.HTML:
           formatted = this.convertToHtml(formatted);
@@ -178,9 +183,11 @@ export class ResultFormatterService {
         case OutputFormat.MARKDOWN:
           formatted = this.convertToMarkdown(formatted);
           break;
+        case OutputFormat.TEXT:
         default:
           formatted = this.formatPlainText(formatted);
       }
+
       return formatted;
     } catch (error) {
       throw new ResultFormatterException(
@@ -191,7 +198,9 @@ export class ResultFormatterService {
   }
 
   /**
-   * 보조 해석 포맷팅 - 보조 해석들을 각각 포맷팅하여 반환
+   * 보조 해석 포맷팅
+   * @param interpretations - 포맷팅할 보조 해석들
+   * @param options - 포맷팅 옵션
    */
   private async formatSupportingInterpretations(
     interpretations: string[],
@@ -216,7 +225,9 @@ export class ResultFormatterService {
   }
 
   /**
-   * 충돌 정보 포맷팅 - 각 충돌 정보를 포맷팅
+   * 충돌 정보 포맷팅
+   * @param conflicts - 포맷팅할 충돌 정보
+   * @param options - 포맷팅 옵션
    */
   private async formatConflicts(
     conflicts: any[],
@@ -235,30 +246,97 @@ export class ResultFormatterService {
   }
 
   /**
-   * 요약 생성 - 결과를 짧게 요약하여 반환
+   * 요약본 생성
+   * @param mainInterpretation - 메인 해석 내용
+   * @param options - 포맷팅 옵션
    */
   private async createSummary(
-    content: string,
+    mainInterpretation: string,
     options: Required<IFormattingOptions>,
   ): Promise<string> {
-    const summary = content.slice(0, options.maxSummaryLength);
-    return options.outputFormat === OutputFormat.HTML
-      ? `<p>${summary}</p>`
-      : summary;
+    try {
+      // 주요 문장 추출
+      const sentences = this.extractSentences(mainInterpretation);
+
+      // 중요도에 따라 문장 정렬
+      const rankedSentences = this.rankSentences(sentences);
+
+      // 최대 길이를 고려하여 요약본 생성
+      let summary = this.combineSentences(
+        rankedSentences,
+        options.maxSummaryLength,
+      );
+
+      // 출력 형식에 맞게 포맷팅
+      summary = this.applyLanguageFormatting(summary, options.language);
+
+      return summary;
+    } catch (error) {
+      throw new ResultFormatterException('Failed to create summary', error);
+    }
   }
 
   /**
-   * 메타데이터 포맷팅 - 결과 메타데이터를 포맷
+   * 메타데이터 포맷팅
+   * @param metadata - 포맷팅할 메타데이터
    */
   private formatMetadata(metadata: any): any {
-    return {
-      ...metadata,
-      timestamp: new Date(),
-    };
+    try {
+      return {
+        ...metadata,
+        formattedTimestamp: new Date(metadata.timestamp).toISOString(),
+        processingDuration: `${metadata.processingTime}ms`,
+      };
+    } catch (error) {
+      this.logger.warn('Failed to format metadata', { error, metadata });
+      return metadata; // 실패 시 원본 반환
+    }
   }
 
   /**
-   * 성능 메트릭 로깅 - 포맷팅 과정에서 수집된 성능 메트릭을 로깅
+   * 텍스트 형식 변환 유틸리티
+   */
+  private convertToHtml(text: string): string {
+    return text
+      .split('\n\n')
+      .map((paragraph) => `<p>${paragraph}</p>`)
+      .join('\n');
+  }
+
+  private convertToMarkdown(text: string): string {
+    return text
+      .split('\n\n')
+      .map((paragraph) => `${paragraph}\n\n`)
+      .join('');
+  }
+
+  private formatPlainText(text: string): string {
+    return text.trim();
+  }
+
+  /**
+   * 언어별 포맷팅 규칙 적용
+   * @param text - 포맷팅할 텍스트
+   * @param language - 언어 코드
+   */
+  private applyLanguageFormatting(text: string, language: string): string {
+    try {
+      switch (language.toLowerCase()) {
+        case 'ko':
+          return this.formatKoreanText(text);
+        case 'en':
+          return this.formatEnglishText(text);
+        default:
+          return text;
+      }
+    } catch (error) {
+      this.logger.warn('Language formatting failed', { error, language });
+      return text; // 실패 시 원본 반환
+    }
+  }
+
+  /**
+   * 성능 메트릭 로깅
    */
   private logFormattingMetrics(
     originalResult: IInterpretationResult,
@@ -268,72 +346,85 @@ export class ResultFormatterService {
   ): void {
     this.loggingService.logAnalysis('RESULT_FORMATTING', {
       level: 'DEBUG',
-      duration,
-      context,
-      formattedResultLength: formattedResult.content.main.length,
-      confidence: originalResult.confidence,
-      timestamp: new Date(),
-    });
-  }
-
-  /**
-   * 에러 처리 - 포맷팅 중 발생한 에러를 로깅하고 처리
-   */
-  private handleError(error: Error, context: IFormattingContext): void {
-    this.logger.error('Formatting failed', {
-      context,
-      error: {
-        name: error.name,
-        message: error.message,
-        stack: error.stack,
+      context: {
+        ...context,
+        duration,
+      },
+      metrics: {
+        originalLength: originalResult.mainInterpretation.length,
+        formattedLength: formattedResult.content.main.length,
+        compressionRatio:
+          formattedResult.content.main.length /
+          originalResult.mainInterpretation.length,
+        supportingCount: formattedResult.content.supporting.length,
+        duration,
+      },
+      metadata: {
+        type: formattedResult.type,
+        format: formattedResult.format,
+        confidence: formattedResult.confidence,
       },
     });
   }
 
   /**
-   * 언어별 포맷팅 적용 - 언어에 따라 텍스트를 다르게 포맷
+   * 에러 처리
    */
-  private applyLanguageFormatting(text: string, language: string): string {
-    return text; // 실제 구현 시 언어에 따른 포맷 적용
+  private handleError(error: Error, context: IFormattingContext): void {
+    this.logger.error('Result formatting failed', {
+      context,
+      error: {
+        name: error.name,
+        message: error.message,
+        stack: error.stack,
+        cause: error.cause,
+      },
+      timestamp: new Date(),
+      duration: Date.now() - context.startTime,
+    });
   }
 
   /**
-   * 텍스트를 HTML 형식으로 변환
+   * 문장 추출 및 순위화 유틸리티
    */
-  private convertToHtml(text: string): string {
-    return `<p>${text}</p>`;
+  private extractSentences(text: string): string[] {
+    return text
+      .split(/[.!?。]+/g)
+      .map((sentence) => sentence.trim())
+      .filter((sentence) => sentence.length > 0);
   }
 
-  /**
-   * 텍스트를 마크다운 형식으로 변환
-   */
-  private convertToMarkdown(text: string): string {
-    return `**${text}**`;
+  private rankSentences(sentences: string[]): string[] {
+    return sentences.sort((a, b) => {
+      // 문장의 중요도를 계산하는 로직
+      const scoreA = this.calculateSentenceImportance(a);
+      const scoreB = this.calculateSentenceImportance(b);
+      return scoreB - scoreA;
+    });
   }
 
-  /**
-   * 기본 텍스트 포맷 - 추가 변환 없이 일반 텍스트로 반환
-   */
-  private formatPlainText(text: string): string {
-    return text;
+  private calculateSentenceImportance(sentence: string): number {
+    // 문장의 중요도를 계산하는 로직
+    // 예: 키워드 출현 빈도, 문장 길이, 위치 등을 고려
+    let score = 0;
+    score += sentence.length * 0.1;
+    score += (sentence.match(/[중요|핵심|특징|결론]/g) || []).length * 2;
+    return score;
   }
 
-  /**
-   * 보조 해석 문맥 추가 - 보조 해석의 경우 추가 문맥을 포함해 반환
-   */
-  private addSupportingContext(formatted: string): string {
-    return `Supporting: ${formatted}`;
+  private combineSentences(sentences: string[], maxLength: number): string {
+    let result = '';
+    for (const sentence of sentences) {
+      const potentialResult = result + sentence + '. ';
+      if (potentialResult.length > maxLength) {
+        break;
+      }
+      result = potentialResult;
+    }
+    return result.trim();
   }
 
-  /**
-   * 설명 포맷팅 - 충돌 설명 또는 해결 정보를 지정된 형식으로 변환
-   */
-  private formatDescription(
-    text: string,
-    options: Required<IFormattingOptions>,
-  ): string {
-    return options.outputFormat === OutputFormat.MARKDOWN
-      ? `**${text}**`
-      : text;
+  private addSupportingContext(text: string): string {
+    return `참고사항: ${text}`;
   }
 }

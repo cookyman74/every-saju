@@ -2,16 +2,16 @@
 
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { InterpretationRepository } from '../repositories/interpretation.repository';
-import { EnhancedLoggingService } from '../../common/services/enhanced-logging.service';
-import { PatternMatchingRules } from '../rules/pattern-matching.rules';
+import { InterpretationRepository } from '../../repositories/interpretation.repository/interpretation.repository';
+import { EnhancedLoggingService } from '../../../common/services/enhanced-logging/enhanced-logging.service';
+import { PatternMatchingRules } from '../../rules/pattern-matching.rules';
 import {
   ISajuPillar,
   IPatternMatchResult,
   IMatchingCondition,
   InterpretationPattern,
-} from '../interfaces';
-import { PatternMatchingException } from '../exceptions/pattern-matching.exception';
+} from '../../interfaces/';
+import { PatternMatchingException } from '../../exceptions/pattern-matching.exception';
 
 // 매칭 결과의 신뢰도 레벨 정의
 export enum ConfidenceLevel {
